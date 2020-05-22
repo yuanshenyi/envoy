@@ -193,28 +193,32 @@ void HeaderMapImpl::HeaderEntryImpl::value(const HeaderEntry& header) {
 }
 
 #define INLINE_HEADER_STATIC_MAP_ENTRY(name)                                                       \
-  add(Headers::get().name.get().c_str(), [](HeaderMapType& h) -> StaticLookupResponse {            \
-    return {&h.inline_headers_.name##_, &Headers::get().name};                                     \
+  add(Headers::get().name.get().c_str(), [](ImplType& h) -> StaticLookupResponse {                 \
+    return {&h.inline_headers_[CustomInlineHeaderRegistry<InterfaceType>::getInlineHeader(         \
+                Headers::get().name).get() * sizeof(HeaderEntryImpl*)],                                                             \
+            &Headers::get().name};                                                                 \
   });
 
-template <> HeaderMapImpl::StaticLookupTable<RequestHeaderMapImpl>::StaticLookupTable() {
+template <>
+HeaderMapImpl::StaticLookupTable<RequestHeaderMapImpl, RequestHeaderMap>::StaticLookupTable() {
   INLINE_REQ_HEADERS(INLINE_HEADER_STATIC_MAP_ENTRY)
   INLINE_REQ_RESP_HEADERS(INLINE_HEADER_STATIC_MAP_ENTRY)
 
   // Special case where we map a legacy host header to :authority.
-  add(Headers::get().HostLegacy.get().c_str(), [](HeaderMapType& h) -> StaticLookupResponse {
+  /*add(Headers::get().HostLegacy.get().c_str(), [](HeaderMapType& h) -> StaticLookupResponse {
     return {&h.inline_headers_.Host_, &Headers::get().Host};
-  });
+  });*/
 }
 
-template <> HeaderMapImpl::StaticLookupTable<ResponseHeaderMapImpl>::StaticLookupTable() {
+template <>
+HeaderMapImpl::StaticLookupTable<ResponseHeaderMapImpl, ResponseHeaderMap>::StaticLookupTable() {
   INLINE_RESP_HEADERS(INLINE_HEADER_STATIC_MAP_ENTRY)
   INLINE_REQ_RESP_HEADERS(INLINE_HEADER_STATIC_MAP_ENTRY)
   INLINE_RESP_HEADERS_TRAILERS(INLINE_HEADER_STATIC_MAP_ENTRY)
 }
 
 template <>
-HeaderMapImpl::StaticLookupTable<ResponseTrailerMapImpl>::StaticLookupTable(){
+HeaderMapImpl::StaticLookupTable<ResponseTrailerMapImpl, ResponseTrailerMap>::StaticLookupTable(){
     INLINE_RESP_HEADERS_TRAILERS(INLINE_HEADER_STATIC_MAP_ENTRY)}
 
 uint64_t HeaderMapImpl::appendToHeader(HeaderString& header, absl::string_view data,
@@ -466,7 +470,7 @@ HeaderEntry* HeaderMapImpl::getExisting(const LowerCaseString& key) {
   return nullptr;
 }
 
-void HeaderMapImpl::iterate(ConstIterateCb cb, void* context) const {
+void HeaderMapImpl::iterate(HeaderMap::ConstIterateCb cb, void* context) const {
   for (const HeaderEntryImpl& header : headers_) {
     if (cb(header, context) == HeaderMap::Iterate::Break) {
       break;
@@ -474,7 +478,7 @@ void HeaderMapImpl::iterate(ConstIterateCb cb, void* context) const {
   }
 }
 
-void HeaderMapImpl::iterateReverse(ConstIterateCb cb, void* context) const {
+void HeaderMapImpl::iterateReverse(HeaderMap::ConstIterateCb cb, void* context) const {
   for (auto it = headers_.rbegin(); it != headers_.rend(); it++) {
     if (cb(*it, context) == HeaderMap::Iterate::Break) {
       break;
@@ -494,13 +498,13 @@ HeaderMap::Lookup HeaderMapImpl::lookup(const LowerCaseString& key,
   if (lookup.has_value()) {
     *entry = *lookup.value().entry_;
     if (*entry) {
-      return Lookup::Found;
+      return HeaderMap::Lookup::Found;
     } else {
-      return Lookup::NotFound;
+      return HeaderMap::Lookup::NotFound;
     }
   } else {
     *entry = nullptr;
-    return Lookup::NotSupported;
+    return HeaderMap::Lookup::NotSupported;
   }
 }
 
